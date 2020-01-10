@@ -24,14 +24,16 @@ import tensorflow_datasets as tfds
 cv2 = tfds.core.lazy_imports.cv2
 
 
-class DiabeticRetinopathyDiagnosisConfig(tfds.core.BuilderConfig):
+class WhiteBloodCellClassificationConfig(tfds.core.BuilderConfig):
   """BuilderConfig for DiabeticRetinopathyDiagnosis."""
 
   def __init__(self,
                target_height,
                target_width,
+               channels=[]
                crop=False,
-               scale=500,
+               scale=1,
+               num_classes=8
                **kwargs):
     """BuilderConfig for DiabeticRetinopathyDiagnosis.
     
@@ -42,10 +44,12 @@ class DiabeticRetinopathyDiagnosisConfig(tfds.core.BuilderConfig):
         Gaussian blur filtering.
       **kwargs: keyword arguments forward to super.
     """
-    super(DiabeticRetinopathyDiagnosisConfig, self).__init__(**kwargs)
+    super(WhiteBloodCellClassificationConfig, self).__init__(**kwargs)
     self._target_height = target_height
     self._target_width = target_width
+    self._channels = channels
     self._scale = scale
+    self._num_classes = num_classes
 
   @property
   def target_height(self):
@@ -58,87 +62,51 @@ class DiabeticRetinopathyDiagnosisConfig(tfds.core.BuilderConfig):
   @property
   def scale(self):
     return self._scale
+  
+  @property
+  def channels(self):
+    return self._channels
+  
+  @property
+  def num_classes(self):
+    return self._num_classes
 
 
-class DiabeticRetinopathyDiagnosis(tfds.image.DiabeticRetinopathyDetection):
+class WhiteBloodCellClassification(tfds.core.DatasetBuilder):
 
   BUILDER_CONFIGS = [
-      DiabeticRetinopathyDiagnosisConfig(
-          name="medium",
+      WhiteBloodCellClassificationConfig(
+          name="realworld_stainfree",
           version="0.0.1",
-          description="Images for Medium level.",
-          target_height=256,
-          target_width=256,
+          description="BF, BF2, and SSC images for RealWorld level.",
+          target_height=90,
+          target_width=90,
+          channels=["BF", "BF2",  "SSC"]
       ),
-      DiabeticRetinopathyDiagnosisConfig(
-          name="realworld",
+      WhiteBloodCellClassificationConfig(
+          name="realworld_onlybf",
           version="0.0.1",
-          description="Images for RealWorld level.",
-          target_height=512,
-          target_width=512,
-      ),
+          description="BF, and BF2 images for RealWorld level.",
+          target_height=90,
+          target_width=90,
+          channels=["BF", "BF2"]
+      )
   ]
 
   def _info(self):
     return tfds.core.DatasetInfo(
         builder=self,
-        description="A large set of high-resolution retina images taken under "
-        "a variety of imaging conditions. "
-        "Ehanced contrast and resized to {}x{}.".format(
-            self.builder_config.target_height,
-            self.builder_config.target_width),
+        description="An imaging flow cytometry dataset of white blood cells. "
         features=tfds.features.FeaturesDict({
             "name":
             tfds.features.Text(),  # patient ID + eye. eg: "4_left".
             "image":
             tfds.features.Image(shape=(self.builder_config.target_height,
-                                       self.builder_config.target_width, 3)),
-            # 0: (no DR)
-            # 1: (with DR)
+                                       self.builder_config.target_width, len(self.builder_config.channels))),
             "label":
-            tfds.features.ClassLabel(num_classes=2),
-        }),
-        urls=["https://www.kaggle.com/c/diabetic-retinopathy-detection/data"],
-        citation=tfds.image.diabetic_retinopathy_detection._CITATION,
+            tfds.features.ClassLabel(num_classes=self.builder_config.num_classes),
+        })
     )
-
-  def _generate_examples(self, images_dir_path, csv_path=None, csv_usage=None):
-    """Yields Example instances from given CSV.
-    Applies contrast enhancement as in
-    https://github.com/btgraham/SparseConvNet/tree/kaggle_Diabetic_Retinopathy_competition.
-    Turns the multiclass (i.e. 5 classes) problem to binary classification according to
-    https://www.nature.com/articles/s41598-017-17876-z.pdf.
-
-    Args:
-      images_dir_path: path to dir in which images are stored.
-      csv_path: optional, path to csv file with two columns: name of image and
-        label. If not provided, just scan image directory, don't set labels.
-      csv_usage: optional, subset of examples from the csv file to use based on
-        the "Usage" column from the csv.
-    """
-    if csv_path:
-      with tf.io.gfile.GFile(csv_path) as csv_f:
-        reader = csv.DictReader(csv_f)
-        data = [(row["image"], int(row["level"]))
-                for row in reader
-                if csv_usage is None or row["Usage"] == csv_usage]
-    else:
-      data = [(fname[:-5], -1)
-              for fname in tf.io.gfile.listdir(images_dir_path)
-              if fname.endswith(".jpeg")]
-    for name, label in data:
-      yield {
-          "name":
-          name,
-          "image":
-          self._preprocess(tf.io.gfile.GFile("%s/%s.jpeg" %
-                                             (images_dir_path, name),
-                                             mode="rb"),
-                           target_height=self.builder_config.target_height,
-                           target_width=self.builder_config.target_width),
-          "label":
-          int(label > 1),
-      }
 
   @classmethod
   def _preprocess(cls,
@@ -187,19 +155,3 @@ class DiabeticRetinopathyDiagnosis(tfds.image.DiabeticRetinopathyDetection):
     # Encode the image with quality=72 and store it in a BytesIO object.
     _, buff = cv2.imencode(".jpg", image, [int(cv2.IMWRITE_JPEG_QUALITY), 72])
     return io.BytesIO(buff.tostring())
-
-  @staticmethod
-  def _get_radius(img, scale):
-    """Returns radius of the circle to use.
-      
-    Args:
-      img: `numpy.ndarray`, an image, with shape [height, width, 3].
-      scale: `int`, the radius of the neighborhood.
-    
-    Returns:
-      A resized image.
-    """
-    x = img[img.shape[0] // 2, ...].sum(axis=1)
-    r = 0.5 * (x > x.mean() // 10).sum()
-    s = scale * 1.0 / r
-    return cv2.resize(img, (0, 0), fx=s, fy=s)

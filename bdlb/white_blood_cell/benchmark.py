@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Diabetic retinopathy diagnosis BDL Benchmark."""
+"""White blood cell classification BDL Benchmark."""
 
 from __future__ import absolute_import
 from __future__ import division
@@ -29,12 +29,12 @@ from ..core.benchmark import Benchmark
 from ..core.benchmark import BenchmarkInfo
 from ..core import transforms
 
-_DIABETIC_RETINOPATHY_DIAGNOSIS_DATA_DIR = os.path.join(
-    DATA_DIR, "downloads", "manual", "diabetic_retinopathy_diagnosis")
+_WBCC_DATA_DIR = os.path.join(
+    "/home/maximl", "scratch", "wbc")
 
 
-class DiabeticRetinopathyDiagnosisBecnhmark(Benchmark):
-  """Diabetic retinopathy diagnosis benchmark class."""
+class WhiteBloodCellClassificationBenchmark(Benchmark):
+  """White Blood Cell Classification benchmark class."""
 
   def __init__(self,
                level,
@@ -61,8 +61,7 @@ class DiabeticRetinopathyDiagnosisBecnhmark(Benchmark):
         raise
       else:
         logging.info(
-            "Data not found, `DiabeticRetinopathyDiagnosisBecnhmark.download_and_prepare()`"
-            " is now running...")
+            "Data not yet available."
         self.download_and_prepare()
 
   @classmethod
@@ -269,108 +268,6 @@ class DiabeticRetinopathyDiagnosisBecnhmark(Benchmark):
       ds_test = tfds.as_numpy(ds_test)
 
     return DataSplits(ds_train, ds_validation, ds_test)
-
-  @classmethod
-  def download_and_prepare(cls, levels=None):
-    """Downloads dataset from Kaggle, extracts zip files
-    and processes it using `tensorflow_datasets`.
-    
-    Args:
-      levels: (optional) `iterable` of `str`, specifies which
-        levels from {'medium', 'realworld'} to prepare,
-        if None it prepares all the levels.
-
-    Raises:
-      OSError: if `~/.kaggle/kaggle.json` is not set up. 
-    """
-    # Disable GPU for data download, extraction and preparation
-    import os
-    os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-    cls._download()
-    cls._extract()
-    cls._prepare(levels)
-
-  @staticmethod
-  def _download():
-    """Downloads data from Kaggle using `tensorflow_datasets`.
-    
-    Raises:
-      OSError: if `~/.kaggle/kaggle.json` is not set up. 
-    """
-    import subprocess as sp
-    import tensorflow_datasets as tfds
-
-    # Append `/home/$USER/.local/bin` to path
-    os.environ["PATH"] += ":/home/{}/.local/bin/".format(os.environ["USER"])
-
-    # Download all files from Kaggle
-    drd = tfds.download.kaggle.KaggleCompetitionDownloader(
-        "diabetic-retinopathy-detection")
-    try:
-      for dfile in drd.competition_files:
-        drd.download_file(dfile,
-                          output_dir=_DIABETIC_RETINOPATHY_DIAGNOSIS_DATA_DIR)
-    except sp.CalledProcessError as cpe:
-      raise OSError(
-          str(cpe) + "." +
-          " Make sure you have ~/.kaggle/kaggle.json setup, fetched from the Kaggle website"
-          " https://www.kaggle.com/<username>/account -> 'Create New API Key'."
-          " Also accept the dataset license by going to"
-          " https://www.kaggle.com/c/diabetic-retinopathy-detection/rules"
-          " and look for the button 'I Understand and Accept' (make sure when reloading the"
-          " page that the button does not pop up again).")
-
-  @staticmethod
-  def _extract():
-    """Extracts zip files downloaded from Kaggle."""
-    import glob
-    import tqdm
-    import zipfile
-    import tempfile
-
-    # Extract train and test original images
-    for split in ["train", "test"]:
-      # Extract "<split>.zip.00*"" files to "<split>"
-      with tempfile.NamedTemporaryFile() as tmp:
-        # Concatenate "<split>.zip.00*" to "<split>.zip"
-        for fname in tqdm.tqdm(
-            sorted(
-                glob.glob(
-                    os.path.join(_DIABETIC_RETINOPATHY_DIAGNOSIS_DATA_DIR,
-                                 "{split}.zip.00*".format(split=split))))):
-          # Unzip "<split>.zip" to "<split>"
-          with open(fname, "rb") as ztmp:
-            tmp.write(ztmp.read())
-        with zipfile.ZipFile(tmp) as zfile:
-          for image in tqdm.tqdm(iterable=zfile.namelist(),
-                                 total=len(zfile.namelist())):
-            zfile.extract(member=image,
-                          path=_DIABETIC_RETINOPATHY_DIAGNOSIS_DATA_DIR)
-      # Delete "<split>.zip.00*" files
-      for splitzip in os.listdir(_DIABETIC_RETINOPATHY_DIAGNOSIS_DATA_DIR):
-        if "{split}.zip.00".format(split=split) in splitzip:
-          os.remove(
-              os.path.join(_DIABETIC_RETINOPATHY_DIAGNOSIS_DATA_DIR, splitzip))
-
-    # Extract "sample.zip", "trainLabels.csv.zip"
-    for fname in ["sample", "trainLabels.csv"]:
-      zfname = os.path.join(_DIABETIC_RETINOPATHY_DIAGNOSIS_DATA_DIR,
-                            "{fname}.zip".format(fname=fname))
-      with zipfile.ZipFile(zfname) as zfile:
-        zfile.extractall(_DIABETIC_RETINOPATHY_DIAGNOSIS_DATA_DIR)
-      os.remove(zfname)
-
-  @staticmethod
-  def _prepare(levels=None):
-    """Generates the TFRecord objects for medium and realworld experiments."""
-    import multiprocessing
-    from absl import logging
-    from .tfds_adapter import DiabeticRetinopathyDiagnosis
-    # Hangle each level individually
-    for level in levels or ["medium", "realworld"]:
-      dtask = DiabeticRetinopathyDiagnosis(data_dir=DATA_DIR, config=level)
-      logging.debug("=== Preparing TFRecords for {} ===".format(level))
-      dtask.download_and_prepare()
 
   @classmethod
   def _preprocessors(cls):
