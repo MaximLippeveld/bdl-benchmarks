@@ -61,7 +61,7 @@ class WhiteBloodCellClassificationBenchmark(Benchmark):
         raise
       else:
         logging.info(
-            "Data not yet available."
+            "Data not yet available.")
         self.download_and_prepare()
 
   @classmethod

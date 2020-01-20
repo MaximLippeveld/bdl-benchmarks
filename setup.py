@@ -36,7 +36,7 @@ setup(
     install_requires=[
         "tensorflow-gpu==2.0.0-beta0",
         "tfp-nightly==0.8.0.dev20190601",
-        "tensorflow-datasets==1.0.2",
+        "tensorflow-datasets",
         "numpy==1.16.6",
         "scipy==1.3.0",
         "pandas==0.24.2",
